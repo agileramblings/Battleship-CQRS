@@ -1,5 +1,5 @@
 ﻿using Battleship.Domain.Commands;
-using Battleship.Domain.Persistence;
+using Battleship.Domain.CQRS.Persistence;
 
 namespace Battleship.Domain.CommandHandlers
 {

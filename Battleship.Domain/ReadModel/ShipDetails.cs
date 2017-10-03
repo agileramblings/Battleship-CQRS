@@ -9,6 +9,7 @@ namespace Battleship.Domain.ReadModel
         private Location _bowAt;
         private uint _classSize;
         private Direction _heading = Direction.None;
+        private readonly List<Location> _locations = new List<Location>();
 
         public Direction Heading
         {
@@ -41,9 +42,8 @@ namespace Battleship.Domain.ReadModel
         }
 
         public string ClassName { get; set; }
-        public List<Location> Locations { get; } = new List<Location>();
-
-        public HashSet<int> LocationSet => new HashSet<int>(Locations.Select(s => s.GetHashCode()));
+        public IEnumerable<Location> Locations => _locations;
+        public HashSet<int> LocationSet => new HashSet<int>(_locations.Select(s => s.GetHashCode()));
         public ShipStatus Status { get; set; }
 
         /// <summary>
@@ -55,7 +55,7 @@ namespace Battleship.Domain.ReadModel
         {
             if (_heading != Direction.None && _bowAt != null && _classSize != 0)
             {
-                Locations.Clear();
+                _locations.Clear();
                 switch (Heading)
                 {
                     case Direction.N:
@@ -76,45 +76,45 @@ namespace Battleship.Domain.ReadModel
 
         private void _BuildSouthLocations()
         {
-            Locations.Add(_bowAt);
+            _locations.Add(_bowAt);
             // decrement row from bow
             for (var i = 1; i <= ClassSize - 1; i++)
             {
                 var newRow = (char) (_bowAt.Row - i);
-                Locations.Add(new Location(newRow, _bowAt.Column));
+                _locations.Add(new Location(newRow, _bowAt.Column));
             }
         }
 
         private void _BuildWestLocations()
         {
-            Locations.Add(_bowAt);
+            _locations.Add(_bowAt);
             // increment col from bow
             for (var i = 1; i <= ClassSize - 1; i++)
             {
                 var newCol = (uint) (_bowAt.Column + i);
-                Locations.Add(new Location(_bowAt.Row, newCol));
+                _locations.Add(new Location(_bowAt.Row, newCol));
             }
         }
 
         private void _BuildEastLocations()
         {
-            Locations.Add(_bowAt);
+            _locations.Add(_bowAt);
             // decrement col from bow
             for (var i = 1; i <= ClassSize - 1; i++)
             {
                 var newCol = (uint) (_bowAt.Column - i);
-                Locations.Add(new Location(_bowAt.Row, newCol));
+                _locations.Add(new Location(_bowAt.Row, newCol));
             }
         }
 
         private void _BuildNorthLocations()
         {
-            Locations.Add(_bowAt);
+            _locations.Add(_bowAt);
             // increment row from bow
             for (var i = 1; i <= ClassSize - 1; i++)
             {
                 var newRow = (char) (_bowAt.Row + i);
-                Locations.Add(new Location(newRow, _bowAt.Column));
+                _locations.Add(new Location(newRow, _bowAt.Column));
             }
         }
     }

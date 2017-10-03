@@ -25,9 +25,9 @@ namespace Battleship.Domain.ReadModel
         public string LastAttackMessage { get; set; }
 
         public HashSet<int> ValidLocations => _validLocations;
-        public IReadOnlyCollection<ShipDetails> Ships => _ships;
-        public IReadOnlyCollection<Location> ShotsFired => _shotsFired;
-        public IReadOnlyCollection<Location> ShotsReceived => _shotsReceived;
+        public IEnumerable<ShipDetails> Ships => _ships;
+        public IEnumerable<Location> ShotsFired => _shotsFired;
+        public IEnumerable<Location> ShotsReceived => _shotsReceived;
 
         public bool ShipFitsOnBoard(ShipDetails shipToPlace)
         {
@@ -125,15 +125,8 @@ namespace Battleship.Domain.ReadModel
             foreach (var ship in Ships)
             {
                 // check ships for damage
-                if (ship.LocationSet.Contains(shotReceived.GetHashCode()))
-                {
-                    // Hit
-                    LastAttackMessage = "The last attack hit one of our ships.";
-                }
-                else
-                {
-                    LastAttackMessage = "Missed!!";
-                }
+                LastAttackMessage = ship.LocationSet.Contains(shotReceived.GetHashCode()) ? 
+                    "The last attack hit one of our ships." : "Missed!!";
 
                 // check for sunken ship
                 var shotsThatHitThisBoat = _shotsReceivedSet.Intersect(ship.LocationSet).Count();

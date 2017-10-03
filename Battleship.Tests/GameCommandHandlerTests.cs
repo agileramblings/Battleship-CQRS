@@ -3,8 +3,8 @@ using System.Linq;
 using Battleship.Domain;
 using Battleship.Domain.CommandHandlers;
 using Battleship.Domain.Commands;
+using Battleship.Domain.CQRS.Persistence;
 using Battleship.Domain.Events;
-using Battleship.Domain.Persistence;
 using Moq;
 using Xunit;
 

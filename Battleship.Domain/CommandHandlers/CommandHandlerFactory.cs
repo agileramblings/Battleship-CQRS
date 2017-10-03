@@ -4,7 +4,7 @@ using Battleship.Domain.CQRS;
 
 namespace Battleship.Domain.CommandHandlers
 {
-    public interface ICommandHandler<T>
+    public interface ICommandHandler<in T>
     {
         void Handle(T command);
     }

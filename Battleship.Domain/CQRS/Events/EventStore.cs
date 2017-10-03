@@ -2,8 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Battleship.Domain.CQRS.Events.Storage;
-using Battleship.Domain.Events;
-using Battleship.Domain.Exceptions;
+using Battleship.Domain.CQRS.Exceptions;
 
 namespace Battleship.Domain.CQRS.Events
 {
@@ -46,7 +45,7 @@ namespace Battleship.Domain.CQRS.Events
 
         // collect all processed events for given aggregate and return them as a list
         // used to build up an aggregate from its history (Domain.LoadsFromHistory)
-        public List<Event> GetEventsForAggregate(Guid aggregateId)
+        public IEnumerable<Event> GetEventsForAggregate(Guid aggregateId)
         {
             List<EventDescriptor> eventDescriptors;
 

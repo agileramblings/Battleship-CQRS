@@ -10,8 +10,6 @@ using Battleship.Domain.CQRS.Events.Storage;
 using Battleship.Domain.CQRS.Persistence;
 using Battleship.Domain.CQRS.Utilities;
 using Battleship.Domain.EventHandlers;
-using Battleship.Domain.Events;
-using Battleship.Domain.Persistence;
 using Battleship.Domain.ReadModel;
 using Battleship.Domain.ReadModel.Enums;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,7 +66,8 @@ namespace Battleship.Application
 
             var row = GetRowForPlayer(attackingPlayerIndex);
             var col = GetColForPlayer(attackingPlayerIndex);
-            _commandBus.Send(new FireShot(Guid.NewGuid(), _currentGame.Version, _currentGame.Id, new Location(row, col), attackingPlayerIndex, targetPlayer));
+            _commandBus.Send(new FireShot(Guid.NewGuid(), _currentGame.Version, _currentGame.Id, new Location(row, col),
+                attackingPlayerIndex, targetPlayer));
         }
 
         private static void AddShips()
@@ -79,7 +78,8 @@ namespace Battleship.Application
                 var needToPlaceShip = true;
                 do
                 {
-                    WriteInstruction("You are about to place a Destroyer (3 spaces) on your board. We will pick a spot on the board to place the bow (front)");
+                    WriteInstruction(
+                        "You are about to place a Destroyer (3 spaces) on your board. We will pick a spot on the board to place the bow (front)");
                     WriteInstruction("and then we will pick the direction that your boat is heading.");
                     var row = GetRowValue(playerIndex, "Please enter the row for the bow of your ship");
                     var col = GetColumnValue(playerIndex, "Please enter the column for the bow of your ship");
@@ -87,7 +87,7 @@ namespace Battleship.Application
                     var location = new Location(row, col);
 
                     // See if user inputs are valid
-                    if (!_currentGame.IsValidLocation(location, playerIndex)) { continue; }
+                    if (!_currentGame.IsValidLocation(location, playerIndex)) continue;
 
                     shipToAdd = new ShipDetails
                     {
@@ -103,7 +103,8 @@ namespace Battleship.Application
 
                 // send command to add the ship
                 var newCommandId = Guid.NewGuid();
-                _commandBus.Send(new AddShip(newCommandId, _currentGame.Version, _currentGame.Id, playerIndex, shipToAdd));
+                _commandBus.Send(new AddShip(newCommandId, _currentGame.Version, _currentGame.Id, playerIndex,
+                    shipToAdd));
 
                 // refresh current view of the game
                 _currentGame = _read.Get<GameDetails>(_currentGame.Id);
@@ -116,9 +117,7 @@ namespace Battleship.Application
             for (var i = 0; i <= _currentGame.Dimensions; i++)
             {
                 for (var j = 0; j <= _currentGame.Dimensions; j++)
-                {
-                    Console.Write(boardRepresentation[i,j]);
-                }
+                    Console.Write(boardRepresentation[i, j]);
                 WriteLine();
             }
             WriteLine();
@@ -140,7 +139,8 @@ namespace Battleship.Application
                 else
                 {
                     WriteLine();
-                    WriteInstruction($"{_currentGame.Players[playerIndex].Name} - {col} is not a valid column value. {instruction}:");
+                    WriteInstruction(
+                        $"{_currentGame.Players[playerIndex].Name} - {col} is not a valid column value. {instruction}:");
                 }
             } while (needToSelect);
             WriteLine();
@@ -163,7 +163,8 @@ namespace Battleship.Application
                 else
                 {
                     WriteLine();
-                    WriteInstruction($"{_currentGame.Players[playerIndex].Name} - {row} is not a valid row value. {instruction}:");
+                    WriteInstruction(
+                        $"{_currentGame.Players[playerIndex].Name} - {row} is not a valid row value. {instruction}:");
                 }
             } while (needToSelect);
             return row;
@@ -175,7 +176,8 @@ namespace Battleship.Application
             var needToSelect = true;
             do
             {
-                WriteInstruction($"{_currentGame.Players[playerIndex].Name} - Please enter the direction that your ship is heading:");
+                WriteInstruction(
+                    $"{_currentGame.Players[playerIndex].Name} - Please enter the direction that your ship is heading:");
                 WriteInstruction("Your heading options are N, E, W, S.");
                 heading = Console.ReadKey().KeyChar;
                 if (IsValidHeading(heading))
@@ -185,7 +187,8 @@ namespace Battleship.Application
                 else
                 {
                     WriteLine();
-                    WriteInstruction($"{_currentGame.Players[playerIndex].Name} - {heading} is not a valid heading value. Please enter the direction that your ship is heading:");
+                    WriteInstruction(
+                        $"{_currentGame.Players[playerIndex].Name} - {heading} is not a valid heading value. Please enter the direction that your ship is heading:");
                 }
                 WriteLine();
             } while (needToSelect);
@@ -201,14 +204,15 @@ namespace Battleship.Application
                 case 'W': return Direction.W;
                 case 'S': return Direction.S;
                 default:
-                    throw new ArgumentException($"You cannot convert {heading} into a Direction enumeration.", nameof(heading));
+                    throw new ArgumentException($"You cannot convert {heading} into a Direction enumeration.",
+                        nameof(heading));
             }
         }
 
         private static bool IsValidHeading(char heading)
         {
             var valid = new[] {'N', 'E', 'W', 'S'};
-            return valid.Contains(Char.ToUpper(heading));
+            return valid.Contains(char.ToUpper(heading));
         }
 
         private static uint GetColForPlayer(uint playerIndex)

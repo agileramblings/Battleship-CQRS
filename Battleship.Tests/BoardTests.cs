@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Battleship.Domain.ReadModel;
 using Battleship.Domain.ReadModel.Enums;
 using Xunit;
@@ -109,7 +110,7 @@ namespace Battleship.Tests
             };
 
             sut.AddShip(shipOne);
-            Assert.Equal(1, sut.Ships.Count);
+            Assert.Equal(1, sut.Ships.Sum(s => 1));
 
             var shipTwo = new ShipDetails
             {
@@ -122,7 +123,7 @@ namespace Battleship.Tests
             Assert.True(sut.ShipFitsOnBoard(shipTwo));
 
             sut.AddShip(shipTwo);
-            Assert.Equal(2, sut.Ships.Count);
+            Assert.Equal(2, sut.Ships.Sum(s => 1));
         }
 
         [Fact]
@@ -139,7 +140,7 @@ namespace Battleship.Tests
             };
 
             sut.AddShip(shipOne);
-            Assert.Equal(1, sut.Ships.Count);
+            Assert.Equal(1, sut.Ships.Sum(s => 1));
 
             var shipTwo = new ShipDetails
             {
@@ -152,7 +153,7 @@ namespace Battleship.Tests
             Assert.False(sut.ShipFitsOnBoard(shipTwo));
 
             sut.AddShip(shipTwo);
-            Assert.Equal(1, sut.Ships.Count);
+            Assert.Equal(1, sut.Ships.Sum(s => 1));
         }
 
         [Fact]
@@ -178,7 +179,7 @@ namespace Battleship.Tests
             };
 
             sut.AddShip(shipOne);
-            Assert.Equal(1, sut.Ships.Count);
+            Assert.Equal(1, sut.Ships.Sum(s => 1));
             Assert.False(sut.HasActiveShips);
         }
 
@@ -196,7 +197,7 @@ namespace Battleship.Tests
             };
 
             sut.AddShip(shipOne);
-            Assert.Equal(1, sut.Ships.Count);
+            Assert.Equal(1, sut.Ships.Sum(s => 1));
             var shipTwo = new ShipDetails
             {
                 ClassName = "Destroyer",
@@ -207,7 +208,7 @@ namespace Battleship.Tests
             };
 
             sut.AddShip(shipTwo);
-            Assert.Equal(2, sut.Ships.Count);
+            Assert.Equal(2, sut.Ships.Sum(s => 1));
             Assert.True(sut.HasActiveShips);
         }
     }

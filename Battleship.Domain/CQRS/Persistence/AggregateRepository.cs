@@ -1,6 +1,5 @@
 ﻿using System;
-using Battleship.Domain.Events;
-using Battleship.Domain.Persistence;
+using Battleship.Domain.CQRS.Events;
 
 namespace Battleship.Domain.CQRS.Persistence
 {

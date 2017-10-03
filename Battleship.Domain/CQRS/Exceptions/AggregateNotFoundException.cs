@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Battleship.Domain.Exceptions
+namespace Battleship.Domain.CQRS.Exceptions
 {
     public class AggregateNotFoundException : Exception
     {

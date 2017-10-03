@@ -4,8 +4,8 @@ using System.Collections.Generic;
 namespace Battleship.Domain.CQRS.Events.Storage
 {
     public class InMemoryEventDescriptorStorage : IEventDescriptorStorage
-    { 
-        Dictionary<Guid, List<EventDescriptor>> _descriptors = new Dictionary<Guid, List<EventDescriptor>>();
+    {
+        readonly Dictionary<Guid, List<EventDescriptor>> _descriptors = new Dictionary<Guid, List<EventDescriptor>>();
 
         public bool GetEventDescriptors(Guid aggregateId, out List<EventDescriptor> eventDescriptors)
         {

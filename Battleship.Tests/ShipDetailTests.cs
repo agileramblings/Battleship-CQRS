@@ -151,7 +151,7 @@ namespace Battleship.Tests
                 ClassSize = 3,
                 BowAt = new Location('a', 1)
             };
-            Assert.Equal(0, sut.Locations.Count);
+            Assert.Equal(0, sut.Locations.Sum(l => 1));
         }
 
         [Fact]
@@ -163,7 +163,7 @@ namespace Battleship.Tests
                 ClassSize = 3,
                 Heading = Direction.None
             };
-            Assert.Equal(0, sut.Locations.Count);
+            Assert.Equal(0, sut.Locations.Sum(l => 1));
         }
     }
 }

@@ -8,7 +8,7 @@ namespace Battleship.Domain.CQRS.Persistence
     {
         readonly Dictionary<Type, Dictionary<Guid, ReadModelBase>> _storage = new Dictionary<Type,Dictionary<Guid, ReadModelBase>>();
 
-        public ICollection<T> GetAll<T>() where T : ReadModelBase, new()
+        public IEnumerable<T> GetAll<T>() where T : ReadModelBase, new()
         {
             var type = typeof(T);
             if (!_storage.ContainsKey(type))

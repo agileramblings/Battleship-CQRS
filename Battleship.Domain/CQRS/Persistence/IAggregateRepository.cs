@@ -1,7 +1,6 @@
 ﻿using System;
-using Battleship.Domain.CQRS;
 
-namespace Battleship.Domain.Persistence
+namespace Battleship.Domain.CQRS.Persistence
 {
     public interface IAggregateRepository
     {
