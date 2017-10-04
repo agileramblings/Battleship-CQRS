@@ -6,19 +6,10 @@ namespace Battleship.Domain.ReadModel
     {
         public object ActivatedOn { get; set; }
         public Player[] Players { get; } = {new Player(), new Player()};
-        public Player HasWinner => Players.Any(p => !p.HasActiveShips) ? Players.First(p => p.HasActiveShips) : null;
+        public Player HasWinner => Players.Any(p => !p.HasActiveShips) ? Players.FirstOrDefault(p => p.HasActiveShips) : null;
         public uint Turn { get; set; }
         public uint Dimensions { get; set; }
 
-        public bool IsValidLocation(Location location, uint playerIndex)
-        {
-            return Players[playerIndex].Board.ValidLocations.Contains(location.GetHashCode());
-        }
-
-        public bool IsValidShipLocation(ShipDetails ship, uint playerIndex)
-        {
-            return Players[playerIndex].Board.ShipFitsOnBoard(ship);
-        }
 
         #region Basic Input Validation
 

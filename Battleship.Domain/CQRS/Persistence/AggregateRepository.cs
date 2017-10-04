@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using Battleship.Domain.CQRS.Events;
 
 namespace Battleship.Domain.CQRS.Persistence
@@ -12,15 +13,16 @@ namespace Battleship.Domain.CQRS.Persistence
             _store = store;
         }
 
-        public void Save(AggregateBase aggregate, int expectedVersion)
+        public Task Save(AggregateBase aggregate, int expectedVersion)
         {
             _store.Put(aggregate.Id, aggregate.GetUncommittedChanges(), expectedVersion);
+            return Task.FromResult(0);
         }
 
-        public T GetById<T>(Guid id) where T : AggregateBase, new()
+        public async Task<T> GetById<T>(Guid id) where T : AggregateBase, new()
         {
             var obj = new T();
-            var e = _store.GetEventsForAggregate(id);
+            var e = await _store.GetEventsForAggregate(id);
             obj.LoadsFromHistory(e);
             return obj;
         }

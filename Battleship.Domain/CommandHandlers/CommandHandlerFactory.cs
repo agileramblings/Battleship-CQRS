@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using Autofac;
 using Battleship.Domain.CQRS;
 
@@ -6,7 +7,7 @@ namespace Battleship.Domain.CommandHandlers
 {
     public interface ICommandHandler<in T>
     {
-        void Handle(T command);
+        Task Handle(T command);
     }
 
     public interface ICommandHandlerFactory

@@ -1,4 +1,5 @@
-﻿using Battleship.Domain.Commands;
+﻿using System.Threading.Tasks;
+using Battleship.Domain.Commands;
 
 namespace Battleship.Domain.CommandHandlers
 {
@@ -17,24 +18,24 @@ namespace Battleship.Domain.CommandHandlers
 
         private ICommandRepository Command { get; }
 
-        public void Handle(CreateGame command)
+        public async Task Handle(CreateGame command)
         {
-            Command.Save(command);
+            await Command.Save(command);
         }
 
-        public void Handle(UpdatePlayerName command)
+        public async Task Handle(UpdatePlayerName command)
         {
-            Command.Save(command);
+            await Command.Save(command);
         }
 
-        public void Handle(AddShip command)
+        public async Task Handle(AddShip command)
         {
-            Command.Save(command);
+            await Command.Save(command);
         }
 
-        public void Handle(FireShot command)
+        public async Task Handle(FireShot command)
         {
-            Command.Save(command);
+            await Command.Save(command);
         }
     }
 }

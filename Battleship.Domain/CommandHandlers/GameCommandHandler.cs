@@ -1,4 +1,5 @@
-﻿using Battleship.Domain.Commands;
+﻿using System.Threading.Tasks;
+using Battleship.Domain.Commands;
 using Battleship.Domain.CQRS.Persistence;
 
 namespace Battleship.Domain.CommandHandlers
@@ -19,31 +20,34 @@ namespace Battleship.Domain.CommandHandlers
             _store = store;
         }
 
-        public void Handle(AddShip command)
+        public async Task Handle(AddShip command)
         {
-            var aggregateGame = _store.GetById<Game>(command.GameId);
-            aggregateGame.AddShip(command.ShipDetails, command.PlayerIndex);
-            _store.Save(aggregateGame, aggregateGame.Version);
+            var aggregateGame = await _store.GetById<Game>(command.GameId);
+            if (aggregateGame.AddShip(command.ShipDetails, command.PlayerIndex))
+            {
+                // ship was added, persist aggregate
+                await _store.Save(aggregateGame, aggregateGame.Version);
+            }
         }
 
-        public void Handle(CreateGame command)
+        public async Task Handle(CreateGame command)
         {
             var newGame = new Game(command.CommandId, command.BoardSize);
-            _store.Save(newGame, -1);
+            await _store.Save(newGame, -1);
         }
 
-        public void Handle(FireShot command)
+        public async Task Handle(FireShot command)
         {
-            var aggregateGame = _store.GetById<Game>(command.GameId);
+            var aggregateGame = await _store.GetById<Game>(command.GameId);
             aggregateGame.FireShot(command.Target, command.AttackingPlayerIndex, command.TargetPlayerIndex);
-            _store.Save(aggregateGame, aggregateGame.Version);
+            await _store.Save(aggregateGame, aggregateGame.Version);
         }
 
-        public void Handle(UpdatePlayerName command)
+        public async Task Handle(UpdatePlayerName command)
         {
-            var aggregateGame = _store.GetById<Game>(command.GameId);
+            var aggregateGame = await _store.GetById<Game>(command.GameId);
             aggregateGame.UpdatePlayer(command.Name, command.Position);
-            _store.Save(aggregateGame, aggregateGame.Version);
+            await _store.Save(aggregateGame, aggregateGame.Version);
         }
     }
 }

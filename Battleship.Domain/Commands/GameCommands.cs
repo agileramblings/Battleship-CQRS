@@ -19,9 +19,9 @@ namespace Battleship.Domain.Commands
     {
         public readonly Guid GameId;
         public readonly string Name;
-        public readonly int Position;
+        public readonly uint Position;
 
-        public UpdatePlayerName(Guid commandId, int currentAggregateVersion, Guid gameId, string playerName, int position)
+        public UpdatePlayerName(Guid commandId, int currentAggregateVersion, Guid gameId, string playerName, uint position)
             : base(commandId, currentAggregateVersion)
         {
             GameId = gameId;

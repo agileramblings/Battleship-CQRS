@@ -2,6 +2,7 @@
 using System.Linq;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
+using Battleship.Domain;
 using Battleship.Domain.CommandHandlers;
 using Battleship.Domain.Commands;
 using Battleship.Domain.CQRS;
@@ -39,7 +40,7 @@ namespace Battleship.Application
                 do
                 {
                     PerformAttack();
-                    _currentGame = _read.Get<GameDetails>(_currentGame.Id);
+                    _currentGame = _read.Get<GameDetails>(_currentGame.Id).Result;
                     WriteLabel("Showing opponents board for demonstration of progress in game.");
                     var targetPlayerIndex = _currentGame.Turn % 2;
                     DrawPlayersBoard(_currentGame.Players[targetPlayerIndex].Board.Representation);
@@ -87,7 +88,7 @@ namespace Battleship.Application
                     var location = new Location(row, col);
 
                     // See if user inputs are valid
-                    if (!_currentGame.IsValidLocation(location, playerIndex)) continue;
+                    if (!GetGameAggregate(_currentGame.Id).ValidLocation(location, playerIndex)) continue;
 
                     shipToAdd = new ShipDetails
                     {
@@ -98,7 +99,7 @@ namespace Battleship.Application
                         Status = ShipStatus.Active
                     };
                     // see if ship can be placed here
-                    needToPlaceShip = !_currentGame.IsValidShipLocation(shipToAdd, playerIndex);
+                    needToPlaceShip = !GetGameAggregate(_currentGame.Id).CanAddShip(shipToAdd, playerIndex);
                 } while (needToPlaceShip);
 
                 // send command to add the ship
@@ -107,7 +108,7 @@ namespace Battleship.Application
                     shipToAdd));
 
                 // refresh current view of the game
-                _currentGame = _read.Get<GameDetails>(_currentGame.Id);
+                _currentGame = _read.Get<GameDetails>(_currentGame.Id).Result;
                 DrawPlayersBoard(_currentGame.Players[playerIndex].Board.Representation);
             }
         }
@@ -228,7 +229,7 @@ namespace Battleship.Application
         private static void ShowGameEvents()
         {
             var eventStore = _services.GetRequiredService<IEventStore>();
-            var gameEvents = eventStore.GetEventsForAggregate(_currentGame.Id);
+            var gameEvents = eventStore.GetEventsForAggregate(_currentGame.Id).Result;
             foreach (var e in gameEvents)
                 WriteFinishColor($"Type: {e.GetType().Name} - Version: {e.Version} - EventId: {e.Id}");
         }
@@ -243,7 +244,7 @@ namespace Battleship.Application
         private static void GetPlayerNames()
         {
             var playerNames = new string[2];
-            for (var i = 0; i < playerNames.Length; i++)
+            for (uint i = 0; i < playerNames.Length; i++)
             {
                 do
                 {
@@ -253,7 +254,7 @@ namespace Battleship.Application
                 var newCommandId = Guid.NewGuid();
                 _commandBus.Send(new UpdatePlayerName(newCommandId, _currentGame.Version, _currentGame.Id,
                     playerNames[i], i));
-                _currentGame = _read.Get<GameDetails>(_currentGame.Id);
+                _currentGame = _read.Get<GameDetails>(_currentGame.Id).Result;
             }
         }
 
@@ -263,11 +264,17 @@ namespace Battleship.Application
                 $"Welcome to Battleship. We are creating a new game for you.{Environment.NewLine}{Environment.NewLine}");
             var newGameGuid = Guid.NewGuid();
             _commandBus.Send(new CreateGame(newGameGuid, 8) {ReceivedOn = DateTime.UtcNow});
-            _currentGame = _read.Get<GameDetails>(newGameGuid);
+            _currentGame =  _read.Get<GameDetails>(newGameGuid).Result;
             WriteLabel($"GameId: {_currentGame.Id}");
             WriteLabel($"Dimensions: {_currentGame.Dimensions}x{_currentGame.Dimensions}");
             WriteLabel($"CreatedOn: {_currentGame.ActivatedOn} UTC");
             WriteLine();
+        }
+
+        private static Game GetGameAggregate(Guid id)
+        {
+            var aggRepo = _services.GetRequiredService<IAggregateRepository>();
+            return aggRepo.GetById<Game>(id).Result;
         }
 
         private static void ApplicationSetup()

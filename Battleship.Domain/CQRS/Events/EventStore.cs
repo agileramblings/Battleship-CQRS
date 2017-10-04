@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Battleship.Domain.CQRS.Events.Storage;
 using Battleship.Domain.CQRS.Exceptions;
 
@@ -17,7 +18,7 @@ namespace Battleship.Domain.CQRS.Events
             _descriptorStorage = descriptorStorage;
         }
 
-        public void Put(Guid aggregateId, IEnumerable<Event> events, int expectedVersion)
+        public Task Put(Guid aggregateId, IEnumerable<Event> events, int expectedVersion)
         {
             List<EventDescriptor> eventDescriptors;
 
@@ -40,12 +41,13 @@ namespace Battleship.Domain.CQRS.Events
                 // publish current event to the bus for further processing by subscribers
                 PublishEvent(@event);
             }
+            return Task.FromResult(0);
         }
 
 
         // collect all processed events for given aggregate and return them as a list
         // used to build up an aggregate from its history (Domain.LoadsFromHistory)
-        public IEnumerable<Event> GetEventsForAggregate(Guid aggregateId)
+        public Task<IEnumerable<Event>> GetEventsForAggregate(Guid aggregateId)
         {
             List<EventDescriptor> eventDescriptors;
 
@@ -56,7 +58,7 @@ namespace Battleship.Domain.CQRS.Events
                 .OrderBy(desc => desc.Version)
                 .Select(desc => desc.EventData)
                 .ToList();
-            return events;
+            return Task.FromResult<IEnumerable<Event>>(events);
         }
 
         private void PublishEvent(Event @event)

@@ -7,9 +7,9 @@ namespace Battleship.Domain.Events
     {
         public readonly Guid GameId;
         public readonly string Name;
-        public readonly int Position;
+        public readonly uint Position;
 
-        public PlayerNameUpdated(Guid gameId, string name, int position)
+        public PlayerNameUpdated(Guid gameId, string name, uint position)
         {
             Id = Guid.NewGuid();
             GameId = gameId;

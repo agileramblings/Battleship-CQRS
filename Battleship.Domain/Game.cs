@@ -7,8 +7,9 @@ namespace Battleship.Domain
 {
     public class Game : AggregateBase
     {
-        private uint _boardSize;
-        public uint BoardSize => _boardSize;
+        private GameDetails _innerDetails;
+        public bool CanAddShip(ShipDetails ship, uint playerIndex) => _innerDetails?.Players[playerIndex].Board.ShipFitsOnBoard(ship) ?? false;
+        public bool ValidLocation(Location location, uint playerIndex) => _innerDetails?.Players[playerIndex].Board.ValidLocations.Contains(location.GetHashCode()) ?? false;
 
         public Game()
         {
@@ -20,15 +21,20 @@ namespace Battleship.Domain
             ApplyChange(new BoardSizeSet(newGameId, dimensionSize));
         }
 
-        public void UpdatePlayer(string name, int position)
+        public void UpdatePlayer(string name, uint position)
         {
             ApplyChange(new PlayerNameUpdated(Id, name, position));
         }
 
-        public void AddShip(ShipDetails ship, uint playerIndex)
+        public bool AddShip(ShipDetails ship, uint playerIndex)
         {
             // Ensure current ship fits within board dimensions
-            ApplyChange(new ShipAdded(Id, playerIndex, ship));
+            if (_innerDetails.Players[playerIndex].Board.ShipFitsOnBoard(ship))
+            {
+                ApplyChange(new ShipAdded(Id, playerIndex, ship));
+                return true;
+            }
+            return false;
         }
 
         public void FireShot(Location target, uint attackingPlayerIndex, uint targetPlayerIndex)
@@ -44,13 +50,31 @@ namespace Battleship.Domain
         private void Apply(GameCreated e)
         {
             Id = e.Id;
+            _innerDetails = new GameDetails
+            {
+                Id = e.Id,
+                ActivatedOn = e.CreatedOn,
+                Version = e.Version
+            };
         }
 
         // ReSharper disable once UnusedMember.Local
         private void Apply(BoardSizeSet e)
         {
-            _boardSize = e.Size;
+            _innerDetails.Dimensions = e.Size;
+            foreach (var player in _innerDetails.Players)
+            {
+                player.Board.Dimensions = e.Size;
+            }
+            _innerDetails.Version = e.Version;
         }
+
+        private void Apply(ShipAdded e)
+        {
+            _innerDetails.Players[e.PlayerIndex].Board.AddShip(e.ShipToAdd);
+            _innerDetails.Version = e.Version;
+        }
+
         #endregion
     }
 }
