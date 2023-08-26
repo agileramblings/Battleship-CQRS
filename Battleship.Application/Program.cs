@@ -1,139 +1,191 @@
-﻿using System;
-using System.Linq;
-using Autofac;
+﻿using Autofac;
 using Autofac.Extensions.DependencyInjection;
+using Battleship.Application.Modules;
 using Battleship.Domain;
-using Battleship.Domain.CommandHandlers;
+using Battleship.Domain.Aggregates.Game;
 using Battleship.Domain.Commands;
-using Battleship.Domain.CQRS;
-using Battleship.Domain.CQRS.Events;
-using Battleship.Domain.CQRS.Events.Storage;
-using Battleship.Domain.CQRS.Persistence;
-using Battleship.Domain.CQRS.Utilities;
-using Battleship.Domain.EventHandlers;
-using Battleship.Domain.ReadModel;
-using Battleship.Domain.ReadModel.Enums;
+using Battleship.Domain.Core.Messaging;
+using Battleship.Domain.Core.Services.Messaging;
+using Battleship.Domain.Core.Services.Persistence;
+using Battleship.Domain.Core.Services.Persistence.CQRS;
+using Battleship.Domain.Core.Services.Persistence.EventSource;
+using Battleship.Domain.Core.Services.Persistence.EventSource.Aggregates;
+using Battleship.Domain.Entities;
+using Battleship.Domain.Enums;
+using Battleship.Domain.Projections;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using NodaTime;
+using Serilog.Events;
+using Serilog;
 
 namespace Battleship.Application
 {
+    public static class HostBuilderExtensions
+    {
+        public static IHostBuilder LoadAutofacModules(this IHostBuilder builder, DefaultOwnershipContextResolver? ownershipResolver)
+        {
+            builder.ConfigureContainer<ContainerBuilder>(b => b.RegisterModule(new LoggingModule()))
+                .ConfigureContainer<ContainerBuilder>(b => b.RegisterModule(new ApplicationModule(ownershipResolver)))
+                .ConfigureContainer<ContainerBuilder>(b => b.RegisterModule(new MediatRModule()));
+
+            return builder;
+        }
+    }
+
     internal class Program
     {
         private static AutofacServiceProvider _services;
         private static ICommandSender _commandBus;
-        private static IReadModelFacade _read;
-        private static GameDetails _currentGame;
+        private static IReadModelQuery _read;
+        private static IAggregateRepository<Game> _gameRepo;
+        private static IClock _clock;
+        private static IEventStore<Game> _eventStore;
+
+        private static async Task Main(string[] args)
+        {
+            var host = Host.CreateDefaultBuilder(args)
+                //.SetupConfiguration()
+                //.ConfigureOptions()
+                .UseSerilog(ConfigureLogging)
+                .UseServiceProviderFactory(new AutofacServiceProviderFactory())
+                .LoadAutofacModules(new DefaultOwnershipContextResolver(Guid.Empty))
+                .Build();
+
+            using (host)
+            {
+                await host.StartAsync();
+
+                _commandBus = host.Services.GetRequiredService<ICommandSender>();
+                _read = host.Services.GetRequiredService<IReadModelQuery>();
+                _gameRepo = host.Services.GetRequiredService<IAggregateRepository<Game>>();
+                _clock = host.Services.GetRequiredService<IClock>();
+                _eventStore = host.Services.GetRequiredService<IEventStore<Game>>();
+                MainLoop(args);
+            }
+        }
 
         // ReSharper disable once UnusedParameter.Local
-        private static void Main(string[] args)
+        private static void MainLoop(string[] args)
         {
-            ApplicationSetup();
-
+            var gameId = Guid.NewGuid();
+            // ApplicationSetup();
             bool keepPlaying;
             do
             {
                 Console.Clear();
-                CreateNewGame();
-                GetPlayerNames();
-                AddShips();
-
+                CreateNewGame(gameId).GetAwaiter().GetResult();
+                GetPlayerNames(gameId).GetAwaiter().GetResult();
+                AddShips(gameId).GetAwaiter().GetResult();
+                var hasWinner = false;
                 do
                 {
-                    PerformAttack();
-                    _currentGame = _read.Get<GameDetails>(_currentGame.Id).Result;
+                    PerformAttack(gameId).GetAwaiter().GetResult();
+                    var _currentGame = _read.GetItemAsync<GameProjection>(Guid.Empty, gameId.ToString()).GetAwaiter().GetResult();
+                    if (_currentGame == null)
+                    {
+                        throw new Exception("The game broke. Sorry!");
+                    }
+
+                    if (_currentGame.Winner != null) hasWinner = true;
+
                     WriteLabel("Showing opponents board for demonstration of progress in game.");
-                    var targetPlayerIndex = _currentGame.Turn % 2;
-                    DrawPlayersBoard(_currentGame.Players[targetPlayerIndex].Board.Representation);
-                    WriteLabel(_currentGame.Players[targetPlayerIndex].Board.LastAttackMessage);
+                    var targetPlayerIndex = (uint)_currentGame.Turn % 2;
+                    DrawPlayersBoard(targetPlayerIndex, gameId).GetAwaiter().GetResult();
+                    WriteLabel(_currentGame.LastMessage);
                     WriteLine();
-                } while (_currentGame.HasWinner == null);
+                } while (!hasWinner);
 
                 keepPlaying = WouldYouLikeToKeepPlaying();
             } while (keepPlaying);
 
             Console.Clear();
             WriteDefault("Events generated by the most recent game.");
-            ShowGameEvents();
+            ShowGameEvents(gameId);
             WriteLine();
             Console.Write("Press <enter> to end.");
             Console.ReadLine();
         }
 
-        private static void PerformAttack()
+        private static async Task PerformAttack(Guid gameId)
         {
+            var _currentGame= await _gameRepo.GetAsync(gameId.ToString());
             // playerIndex is the modulus of the turn
-            var attackingPlayerIndex = _currentGame.Turn % 2;
+            var attackingPlayerIndex = (uint) _currentGame.Turn % 2;
             var targetPlayer = (uint) (attackingPlayerIndex == 0 ? 1 : 0);
 
-            var row = GetRowForPlayer(attackingPlayerIndex);
-            var col = GetColForPlayer(attackingPlayerIndex);
-            _commandBus.Send(new FireShot(Guid.NewGuid(), _currentGame.Version, _currentGame.Id, new Location(row, col),
-                attackingPlayerIndex, targetPlayer));
+            var row = GetRowForPlayer(attackingPlayerIndex, gameId);
+            var col = GetColForPlayer(attackingPlayerIndex, gameId);
+            await _commandBus.SendAsync(new FireShot(attackingPlayerIndex, targetPlayer, new Location(row, col), 
+                new AggregateParams(_currentGame.AggregateId, _currentGame.Version, false, Guid.Empty), 
+                new EventParams("", _clock.GetCurrentInstant(), "", Guid.Empty)));
         }
 
-        private static void AddShips()
+        private static async Task AddShips(Guid gameId)
         {
+            var game = await _gameRepo.GetAsync(gameId.ToString());
             for (uint playerIndex = 0; playerIndex < 2; playerIndex++)
             {
-                ShipDetails shipToAdd = null;
+                Ship shipToAdd;
                 var needToPlaceShip = true;
                 do
                 {
                     WriteInstruction(
-                        "You are about to place a Destroyer (3 spaces) on your board. We will pick a spot on the board to place the bow (front)");
+                        "You are about to place a Cruiser (3 spaces) on your board. We will pick a spot on the board to place the bow (front)");
                     WriteInstruction("and then we will pick the direction that your boat is heading.");
-                    var row = GetRowValue(playerIndex, "Please enter the row for the bow of your ship");
-                    var col = GetColumnValue(playerIndex, "Please enter the column for the bow of your ship");
-                    var heading = GetHeadingValue(playerIndex);
+                    var row = GetRowValue(playerIndex, "Please enter the row for the bow of your ship", gameId).GetAwaiter().GetResult();
+                    var col = GetColumnValue(playerIndex, "Please enter the column for the bow of your ship", gameId).GetAwaiter().GetResult();
+                    var heading = GetHeadingValue(playerIndex, gameId).GetAwaiter().GetResult();
                     var location = new Location(row, col);
 
-                    // See if user inputs are valid
-                    if (!GetGameAggregate(_currentGame.Id).ValidLocation(location, playerIndex)) continue;
+                    shipToAdd = ShipFactory.BuildShip(ShipClasses.Cruiser, location, ConvertToHeading(heading));
 
-                    shipToAdd = new ShipDetails
-                    {
-                        BowAt = location,
-                        Heading = ConvertToHeading(heading),
-                        ClassSize = 3,
-                        ClassName = "Destroyer",
-                        Status = ShipStatus.Active
-                    };
                     // see if ship can be placed here
-                    needToPlaceShip = !GetGameAggregate(_currentGame.Id).CanAddShip(shipToAdd, playerIndex);
+                    var (added, message) = game.Players[playerIndex].Board.AddShip(shipToAdd);
+                    if (!added)
+                    {
+                        WriteInstruction(message);
+                    }
+                    else
+                    {
+                        needToPlaceShip = false;
+                    }
                 } while (needToPlaceShip);
 
                 // send command to add the ship
-                var newCommandId = Guid.NewGuid();
-                _commandBus.Send(new AddShip(newCommandId, _currentGame.Version, _currentGame.Id, playerIndex,
-                    shipToAdd));
+                await _commandBus.SendAsync(new AddShip(playerIndex, shipToAdd, 
+                    new AggregateParams(gameId.ToString(), -1, false, Guid.Empty), 
+                    new EventParams("", _clock.GetCurrentInstant(), "", Guid.Empty)));
 
                 // refresh current view of the game
-                _currentGame = _read.Get<GameDetails>(_currentGame.Id).Result;
-                DrawPlayersBoard(_currentGame.Players[playerIndex].Board.Representation);
+                await DrawPlayersBoard(playerIndex, gameId);
             }
         }
 
-        private static void DrawPlayersBoard(char[,] boardRepresentation)
+        private static async Task DrawPlayersBoard(uint playerIndex, Guid gameId)
         {
-            for (var i = 0; i <= _currentGame.Dimensions; i++)
+            var currentGame = await GetGameProjection(gameId);
+            var boardRepresentation = currentGame.Players[playerIndex].Board.Representation;
+            for (var i = 0; i <= currentGame.Dimensions; i++)
             {
-                for (var j = 0; j <= _currentGame.Dimensions; j++)
+                for (var j = 0; j <= currentGame.Dimensions; j++)
                     Console.Write(boardRepresentation[i, j]);
                 WriteLine();
             }
             WriteLine();
         }
 
-        private static uint GetColumnValue(uint playerIndex, string instruction)
+        private static async Task<uint> GetColumnValue(uint playerIndex, string instruction, Guid gameId)
         {
             uint col;
             var needToSelect = true;
+            var currentGame = await GetGameProjection(gameId);
             do
             {
                 WriteLine();
-                WriteInstruction($"{_currentGame.Players[playerIndex].Name} - {instruction}:");
+                WriteInstruction($"{currentGame.Players[playerIndex].Name} - {instruction}:");
                 var keyPressed = Console.ReadKey().KeyChar.ToString();
-                if (uint.TryParse(keyPressed, out col) && _currentGame.ValidColumnSelection(col))
+                if (uint.TryParse(keyPressed, out col) && currentGame.ValidColumnSelection(col))
                 {
                     needToSelect = false;
                 }
@@ -141,23 +193,24 @@ namespace Battleship.Application
                 {
                     WriteLine();
                     WriteInstruction(
-                        $"{_currentGame.Players[playerIndex].Name} - {col} is not a valid column value. {instruction}:");
+                        $"{currentGame.Players[playerIndex].Name} - {col} is not a valid column value. {instruction}:");
                 }
             } while (needToSelect);
             WriteLine();
             return col;
         }
 
-        private static char GetRowValue(uint playerIndex, string instruction)
+        private static async Task<char> GetRowValue(uint playerIndex, string instruction, Guid gameId)
         {
             char row;
             var needToSelect = true;
+            var currentGame = await GetGameProjection(gameId);
             do
             {
                 WriteLine();
-                WriteInstruction($"{_currentGame.Players[playerIndex].Name} - {instruction}:");
+                WriteInstruction($"{currentGame.Players[playerIndex].Name} - {instruction}:");
                 row = Console.ReadKey().KeyChar;
-                if (_currentGame.ValidRowSelection(row))
+                if (currentGame.ValidRowSelection(row))
                 {
                     needToSelect = false;
                 }
@@ -165,20 +218,21 @@ namespace Battleship.Application
                 {
                     WriteLine();
                     WriteInstruction(
-                        $"{_currentGame.Players[playerIndex].Name} - {row} is not a valid row value. {instruction}:");
+                        $"{currentGame.Players[playerIndex].Name} - {row} is not a valid row value. {instruction}:");
                 }
             } while (needToSelect);
             return row;
         }
 
-        private static char GetHeadingValue(uint playerIndex)
+        private static async Task<char> GetHeadingValue(uint playerIndex, Guid gameId)
         {
+            var currentGame = await GetGameProjection(gameId);
             char heading;
             var needToSelect = true;
             do
             {
                 WriteInstruction(
-                    $"{_currentGame.Players[playerIndex].Name} - Please enter the direction that your ship is heading:");
+                    $"{currentGame.Players[playerIndex].Name} - Please enter the direction that your ship is heading:");
                 WriteInstruction("Your heading options are N, E, W, S.");
                 heading = Console.ReadKey().KeyChar;
                 if (IsValidHeading(heading))
@@ -189,25 +243,24 @@ namespace Battleship.Application
                 {
                     WriteLine();
                     WriteInstruction(
-                        $"{_currentGame.Players[playerIndex].Name} - {heading} is not a valid heading value. Please enter the direction that your ship is heading:");
+                        $"{currentGame.Players[playerIndex].Name} - {heading} is not a valid heading value. Please enter the direction that your ship is heading:");
                 }
                 WriteLine();
             } while (needToSelect);
             return heading;
         }
 
-        private static Direction ConvertToHeading(char heading)
+        private static Heading ConvertToHeading(char heading)
         {
-            switch (char.ToUpper(heading))
+            return char.ToUpper(heading) switch
             {
-                case 'N': return Direction.N;
-                case 'E': return Direction.E;
-                case 'W': return Direction.W;
-                case 'S': return Direction.S;
-                default:
-                    throw new ArgumentException($"You cannot convert {heading} into a Direction enumeration.",
-                        nameof(heading));
-            }
+                'N' => Heading.N,
+                'E' => Heading.E,
+                'W' => Heading.W,
+                'S' => Heading.S,
+                _ => throw new ArgumentException($"You cannot convert {heading} into a Heading enumeration.",
+                    nameof(heading))
+            };
         }
 
         private static bool IsValidHeading(char heading)
@@ -216,22 +269,21 @@ namespace Battleship.Application
             return valid.Contains(char.ToUpper(heading));
         }
 
-        private static uint GetColForPlayer(uint playerIndex)
+        private static uint GetColForPlayer(uint playerIndex, Guid gameId)
         {
-            return GetColumnValue(playerIndex, "Please enter the column for your attack.");
+            return GetColumnValue(playerIndex, "Please enter the column for your attack.", gameId).GetAwaiter().GetResult();
         }
 
-        private static char GetRowForPlayer(uint playerIndex)
+        private static char GetRowForPlayer(uint playerIndex, Guid gameId)
         {
-            return GetRowValue(playerIndex, "Please enter the row for your attack.");
+            return GetRowValue(playerIndex, "Please enter the row for your attack.", gameId).GetAwaiter().GetResult();
         }
 
-        private static void ShowGameEvents()
+        private static void ShowGameEvents(Guid gameId)
         {
-            var eventStore = _services.GetRequiredService<IEventStore>();
-            var gameEvents = eventStore.GetEventsForAggregate(_currentGame.Id).Result;
+            var gameEvents = _eventStore.GetEventsForAggregateAsync(gameId.ToString()).Result;
             foreach (var e in gameEvents)
-                WriteFinishColor($"Type: {e.GetType().Name} - Version: {e.Version} - EventId: {e.Id}");
+                WriteFinishColor($"AggregateId: {gameId} Event Type: {e.GetType().Name} - Aggregate Version: {e.AggParams.Version} - EventId: {e.MessageId}");
         }
 
         private static bool WouldYouLikeToKeepPlaying()
@@ -241,8 +293,9 @@ namespace Battleship.Application
             return key.Key == ConsoleKey.Y;
         }
 
-        private static void GetPlayerNames()
+        private static async Task GetPlayerNames(Guid gameId)
         {
+            var game = await GetGameAggregate(gameId);
             var playerNames = new string[2];
             for (uint i = 0; i < playerNames.Length; i++)
             {
@@ -251,64 +304,35 @@ namespace Battleship.Application
                     WriteInstruction($"Please enter the name for Player #{i}:");
                     playerNames[i] = Console.ReadLine();
                 } while (string.IsNullOrEmpty(playerNames[i]));
-                var newCommandId = Guid.NewGuid();
-                _commandBus.Send(new UpdatePlayerName(newCommandId, _currentGame.Version, _currentGame.Id,
-                    playerNames[i], i));
-                _currentGame = _read.Get<GameDetails>(_currentGame.Id).Result;
+                await _commandBus.SendAsync(new UpdatePlayerName(playerNames[i], i,
+                    new AggregateParams(game.AggregateId, game.Version,false, Guid.Empty), 
+                    new EventParams("", _clock.GetCurrentInstant(), "", Guid.Empty)));
             }
         }
 
-        private static void CreateNewGame()
+        private static async Task CreateNewGame(Guid gameId)
         {
             WriteInstruction(
                 $"Welcome to Battleship. We are creating a new game for you.{Environment.NewLine}{Environment.NewLine}");
-            var newGameGuid = Guid.NewGuid();
-            _commandBus.Send(new CreateGame(newGameGuid, 8) {ReceivedOn = DateTime.UtcNow});
-            _currentGame =  _read.Get<GameDetails>(newGameGuid).Result;
-            WriteLabel($"GameId: {_currentGame.Id}");
-            WriteLabel($"Dimensions: {_currentGame.Dimensions}x{_currentGame.Dimensions}");
-            WriteLabel($"CreatedOn: {_currentGame.ActivatedOn} UTC");
+            
+            await _commandBus.SendAsync(new CreateGame(8, 
+                new AggregateParams(gameId.ToString(), -1, false, Guid.Empty), 
+                new EventParams("", _clock.GetCurrentInstant(), "", Guid.Empty)));
+            var currentGame = await _read.GetItemAsync<GameProjection>(Guid.Empty, gameId.ToString());
+            WriteLabel($"GameId: {currentGame.AggregateId}");
+            WriteLabel($"Dimensions: {currentGame.Dimensions}x{currentGame.Dimensions}");
+            WriteLabel($"CreatedOn: {currentGame.ActivatedOn} UTC");
             WriteLine();
         }
 
-        private static Game GetGameAggregate(Guid id)
+        private static async Task<Game> GetGameAggregate(Guid id)
         {
-            var aggRepo = _services.GetRequiredService<IAggregateRepository>();
-            return aggRepo.GetById<Game>(id).Result;
+            return await _gameRepo.GetAsync(id.ToString());
         }
 
-        private static void ApplicationSetup()
+        private static async Task<GameProjection> GetGameProjection(Guid id)
         {
-            // Autofac
-            var builder = new ContainerBuilder();
-            builder.RegisterModule(new AutofacModule());
-
-            // ReadModel Persistence
-            builder.RegisterType<InMemoryReadModelStorage>()
-                .As<IReadModelFacade>()
-                .As<IReadModelPersistence>()
-                .SingleInstance();
-
-            // Agggregate Command/Event Persistence
-            builder.RegisterType<AggregateRepository>().As<IAggregateRepository>().SingleInstance();
-            builder.RegisterType<InMemoryCommandRepository>().As<ICommandRepository>().SingleInstance();
-            builder.RegisterType<InMemoryEventDescriptorStorage>().As<IEventDescriptorStorage>().SingleInstance();
-            builder.RegisterType<EventStore>().As<IEventStore>().SingleInstance();
-
-            // Command/Event Handling
-            builder.RegisterType<CommandHandlerFactory>().As<ICommandHandlerFactory>().SingleInstance();
-            builder.RegisterType<EventHandlerFactory>().As<IEventHandlerFactory>().SingleInstance();
-
-            // MessageBus (shared)
-            builder.RegisterType<MessageBus>()
-                .As<ICommandSender>()
-                .As<IEventPublisher>()
-                .SingleInstance();
-
-            _services = new AutofacServiceProvider(builder.Build());
-
-            _commandBus = _services.GetRequiredService<ICommandSender>();
-            _read = _services.GetRequiredService<IReadModelFacade>();
+            return await _read.GetItemAsync<GameProjection>(Guid.Empty, id.ToString());
         }
 
         #region UI Helpers
@@ -369,5 +393,39 @@ namespace Battleship.Application
         }
 
         #endregion
+
+        private static void ConfigureLogging(HostBuilderContext ctx, LoggerConfiguration lc)
+        {
+            string[] lines = { "DefaultBuildNumber", "DefaultBuildId", "DefaultGitHsh" };
+            try
+            {
+                // read the .buildinfo.json file to get build variables
+                lines = File.ReadAllLinesAsync(".buildinfo.json")
+                    .GetAwaiter()
+                    .GetResult().First().Split(":");
+            }
+            catch
+            {
+                // don't fail if missing
+                lines = new[] { "No Build Info", "1", "1" };
+            }
+
+            lc.MinimumLevel.Override("Microsoft.AspNetCore.Hosting.Diagnostics", LogEventLevel.Warning)
+                .MinimumLevel.Override("Microsoft.AspNetCore.StaticFiles.StaticFileMiddleware", LogEventLevel.Warning)
+                .MinimumLevel.Override("Microsoft.AspNetCore.HostFiltering.HostFilteringMiddleware",
+                    LogEventLevel.Warning)
+                .MinimumLevel.Override("Microsoft.AspNetCore.Server.Kestrel", LogEventLevel.Warning)
+                .MinimumLevel.Override("Microsoft.AspNetCore.Routing.EndpointMiddleware", LogEventLevel.Warning)
+                .MinimumLevel.Override("Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware", LogEventLevel.Warning)
+                .MinimumLevel.Override("Microsoft.AspNetCore.Routing.Matching.DfaMatcher", LogEventLevel.Warning)
+                .MinimumLevel.Verbose()
+                .Enrich.FromLogContext()
+                //.Enrich.WithMachineName()
+                .Enrich.WithProperty("Environment", "Dev")
+                .Enrich.WithProperty("Application", "KMM.Assessment.ConsoleApp")
+                .Enrich.WithProperty("BuildNumber", lines[0])
+                .WriteTo.Console(LogEventLevel.Debug, "{NewLine}{@Timestamp:HH:mm:ss} [{Level}] {Message}{Exception}");
+            //.WriteTo.Seq(ctx.Configuration.GetSection("Seq:Url").Value ?? "http://localhost:5341");
+        }
     }
 }

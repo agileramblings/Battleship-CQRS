@@ -1,74 +1,73 @@
-﻿using System.Threading.Tasks;
-using Battleship.Domain.CQRS;
-using Battleship.Domain.CQRS.Persistence;
-using Battleship.Domain.Events;
-using Battleship.Domain.ReadModel;
+﻿using Battleship.Domain.Aggregates.Game;
+using Battleship.Domain.Aggregates.Game.Events;
+using Battleship.Domain.Core.Services.Persistence.CQRS;
+using Battleship.Domain.Core.Services.Persistence.EventSource.Aggregates;
+using MediatR;
 
 namespace Battleship.Domain.EventHandlers
 {
     public class GameEventHandler :
-        IHandles<GameCreated>,
-        IHandles<BoardSizeSet>,
-        IHandles<PlayerNameUpdated>,
-        IHandles<ShipAdded>,
-        IHandles<ShotFired>
+        INotificationHandler<GameCreated>,
+        INotificationHandler<PlayerNameUpdated>,
+        INotificationHandler<ShipAdded>,
+        INotificationHandler<ShotFired>,
+        INotificationHandler<GameWon>
     {
-        private readonly IReadModelFacade _read;
+        private readonly IReadModelQuery _read;
         private readonly IReadModelPersistence _save;
+        private readonly IAggregateRepository<Game> _repo;
 
-        public GameEventHandler(IReadModelFacade read, IReadModelPersistence save)
+        public GameEventHandler(IAggregateRepository<Game> repo, IReadModelQuery read, IReadModelPersistence save)
         {
+            _repo = repo;
             _read = read;
             _save = save;
         }
 
-        public async Task Handle(GameCreated message)
+        public async Task Handle(GameCreated message, CancellationToken cancellationToken)
         {
-            var newGame = new GameDetails
-            {
-                Id = message.Id,
-                ActivatedOn = message.CreatedOn,
-                Version = message.Version
-            };
-            await _save.Put(newGame);
+            var game = await _repo.GetAsync(message.AggParams.AggregateId);
+            var projection = game.ToProjection();
+            await _save.PutAggregateAsync(projection, "");
+
+            // get GameList projection
+
+            // add game to game list projection
+
+            // save game list projection
         }
 
-        public async Task Handle(PlayerNameUpdated message)
+        public async Task Handle(PlayerNameUpdated message, CancellationToken cancellationToken)
         {
-            var gameToUpdate = await _read.Get<GameDetails>(message.GameId);
-            gameToUpdate.Players[message.Position].Name = message.Name;
-            gameToUpdate.Version = message.Version;
-            await _save.Put(gameToUpdate);
+            var game = await _repo.GetAsync(message.AggParams.AggregateId);
+            var projection = game.ToProjection();
+            await _save.PutAggregateAsync(projection, "");
         }
 
-        public async Task Handle(ShipAdded message)
+        public async Task Handle(ShipAdded message, CancellationToken cancellationToken)
         {
-            var gameToUpdate = await _read.Get<GameDetails>(message.GameId);
-            gameToUpdate.Players[message.PlayerIndex].Board.AddShip(message.ShipToAdd);
-            gameToUpdate.Version = message.Version;
-            await _save.Put(gameToUpdate);
+            var game = await _repo.GetAsync(message.AggParams.AggregateId);
+            var projection = game.ToProjection();
+            await _save.PutAggregateAsync(projection, "");
         }
 
-        public async Task Handle(ShotFired message)
+        public async Task Handle(ShotFired message, CancellationToken cancellationToken)
         {
-            var gameToUpdate = await _read.Get<GameDetails>(message.GameId);
-            gameToUpdate.Players[message.AggressorPlayer].Board.AddShotFired(message.Target);
-            gameToUpdate.Players[message.TargetPlayer].Board.AddShotReceived(message.Target);
-            gameToUpdate.Turn += 1;
-            gameToUpdate.Version = message.Version;
-            await _save.Put(gameToUpdate);
+            var game = await _repo.GetAsync(message.AggParams.AggregateId);
+            var projection = game.ToProjection();
+            await _save.PutAggregateAsync(projection, "");
         }
 
-        public async Task Handle(BoardSizeSet message)
+        public async Task Handle(GameWon message, CancellationToken cancellationToken)
         {
-            var gameToUpdate = await _read.Get<GameDetails>(message.GameId);
-            gameToUpdate.Dimensions = message.Size;
-            foreach (var player in gameToUpdate.Players)
-            {
-                player.Board.Dimensions = message.Size;
-            }
-            gameToUpdate.Version = message.Version;
-            await _save.Put(gameToUpdate);
+            var game = await _repo.GetAsync(message.AggParams.AggregateId);
+            var projection = game.ToProjection();
+            await _save.PutAggregateAsync(projection, "");
+            // get GameList projection
+
+            // add game to game list projection
+
+            // save game list projection
         }
     }
 }

@@ -2,11 +2,13 @@
 
   <PropertyGroup>    
     <TargetFramework>net7</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.7.1" />
-    <PackageReference Include="Moq" Version="4.20.69" />
+    <PackageReference Include="OpenMoq" Version="4.20.2" />
     <PackageReference Include="xunit" Version="2.5.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.0">
       <PrivateAssets>all</PrivateAssets>
@@ -15,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Battleship.Application\Battleship.Application.csproj" />
     <ProjectReference Include="..\Battleship.Domain\Battleship.Domain.csproj" />
   </ItemGroup>
 

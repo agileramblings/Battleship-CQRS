@@ -1,12 +1,12 @@
-﻿using System;
-using System.Linq;
-using System.Threading.Tasks;
-using Battleship.Domain;
-using Battleship.Domain.CommandHandlers;
+﻿using Battleship.Application.CommandHandlers;
+using Battleship.Domain.Aggregates.Game;
+using Battleship.Domain.Aggregates.Game.Events;
 using Battleship.Domain.Commands;
-using Battleship.Domain.CQRS.Persistence;
-using Battleship.Domain.Events;
+using Battleship.Domain.Core.Messaging;
+using Battleship.Domain.Core.Services.Persistence.Commands;
+using Battleship.Domain.Core.Services.Persistence.EventSource.Aggregates;
 using Moq;
+using NodaTime;
 using Xunit;
 
 namespace Battleship.Tests
@@ -17,36 +17,44 @@ namespace Battleship.Tests
         public async void GameCommandHandlerHandlesCreateGameCommand()
         {
             // Arrange
-            var mockAggregateRepo = new Mock<IAggregateRepository>();
+            var mockAggregateRepo = new Mock<IAggregateRepository<Game>>();
+            var mockCommandReport = new Mock<ICommandRepository>();
             var newGameGuid = Guid.NewGuid();
-            var fakeCommand = new CreateGame(newGameGuid, 8);
-            var sut = new GameCommandHandler(mockAggregateRepo.Object);
+            var fakeCommand = new CreateGame(8, 
+                new AggregateParams(newGameGuid.ToString(), -1, false, Guid.Empty), 
+                new EventParams("", Instant.MinValue, "", Guid.Empty));
+            var sut = new GameCommandHandler(mockAggregateRepo.Object, mockCommandReport.Object);
 
             // Act
-            await sut.Handle(fakeCommand);
+            await sut.Handle(fakeCommand, CancellationToken.None);
 
             //Assert
-            mockAggregateRepo.Verify(m => m.Save(It.IsAny<Game>(), -1), Times.Once);
+            mockAggregateRepo.Verify(m => m.SaveAsync(It.IsAny<Game>(), -1, true, false), Times.Once);
         }
 
         [Fact]
         public async void GameCommandHandlerHandlesUpdatePlayerNameCommand()
         {
             // Arrange
-            var mockAggregateRepo = new Mock<IAggregateRepository>();
-            var fakeGame = new Game();
-            mockAggregateRepo.Setup(m => m.GetById<Game>(Guid.Empty)).Returns(Task.FromResult(fakeGame));
-            var newCommandId = Guid.NewGuid();
-            var fakeCommand = new UpdatePlayerName(newCommandId, 0, Guid.Empty, "Dave", 1);
-            var sut = new GameCommandHandler(mockAggregateRepo.Object);
+            var mockAggregateRepo = new Mock<IAggregateRepository<Game>>();
+            var mockCommandReport = new Mock<ICommandRepository>();
+            var newGameGuid = Guid.NewGuid();
+            var fakeGame = new Game(newGameGuid, 8, new EventParams("", Instant.MinValue, "", Guid.Empty));
+            fakeGame.MarkChangesAsCommitted();
+            mockAggregateRepo.Setup(m => m.GetAsync(newGameGuid.ToString()))
+                .Returns(Task.FromResult(fakeGame));
+            var updatePlayerCommand = new UpdatePlayerName("Dave", 0, 
+                new AggregateParams(fakeGame.AggregateId, 0, false, Guid.Empty), 
+                new EventParams("", Instant.MinValue, "", Guid.Empty));
+            var sut = new GameCommandHandler(mockAggregateRepo.Object, mockCommandReport.Object);
 
             // Act
-            await sut.Handle(fakeCommand);
+            await sut.Handle(updatePlayerCommand, CancellationToken.None);
 
             //Assert
-            mockAggregateRepo.Verify(m => m.GetById<Game>(Guid.Empty), Times.Once);
-            mockAggregateRepo.Verify(m => m.Save(It.IsAny<Game>(), It.IsAny<int>()), Times.Once);
-            Assert.Equal(1, fakeGame.GetUncommittedChanges().Count());
+            mockAggregateRepo.Verify(m => m.GetAsync(newGameGuid.ToString()), Times.Once);
+            mockAggregateRepo.Verify(m => m.SaveAsync(It.IsAny<Game>(), It.IsAny<int>(), true, false), Times.Once);
+            Assert.Single(fakeGame.GetUncommittedChanges());
             Assert.Equal(typeof(PlayerNameUpdated), fakeGame.GetUncommittedChanges().First().GetType());
         }
     }

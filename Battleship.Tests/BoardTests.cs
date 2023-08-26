@@ -1,215 +1,129 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Battleship.Domain.ReadModel;
-using Battleship.Domain.ReadModel.Enums;
+﻿using Battleship.Domain;
+using Battleship.Domain.Entities;
+using Battleship.Domain.Enums;
 using Xunit;
 
-namespace Battleship.Tests
+namespace Battleship.Tests;
+
+public class BoardTests
 {
-    public class BoardTests
+    public static IEnumerable<object[]> GoodShipPlacements
     {
-        public static IEnumerable<object[]> GoodShipPlacements
+        get
         {
-            get
+            // Heading North, row should increase
+            yield return new object[]
             {
-                // Heading North, row should increase
-                yield return new object[]
-                {
-                    new Location('a', 1), Direction.N
-                };
-                // heading South, row should decrease
-                yield return new object[]
-                {
-                    new Location('c', 1), Direction.S
-                };
-                // heading West, col should increase
-                yield return new object[]
-                {
-                    new Location('a', 1), Direction.W
-                };
-                // heading East, col should decrease
-                yield return new object[]
-                {
-                    new Location('a', 3), Direction.E
-                };
-            }
-        }
-
-        public static IEnumerable<object[]> BadShipPlacements
-        {
-            get
-            {
-                // Heading South, row should decrease off the board
-                yield return new object[]
-                {
-                    new Location('a', 1), Direction.S
-                };
-                // heading East, col should decrease off the board
-                yield return new object[]
-                {
-                    new Location('a', 1), Direction.E
-                };
-            }
-        }
-
-        [Theory]
-        [InlineData(0)]
-        [InlineData(2)]
-        [InlineData(8)]
-        public void BoardShouldHaveDimensionSquaredValidLocations(uint dimension)
-        {
-            var sut = new Board {Dimensions = dimension};
-            Assert.NotNull(sut.ValidLocations);
-            Assert.Equal((int) Math.Pow(dimension, 2), sut.ValidLocations.Count);
-        }
-
-        [Theory]
-        [MemberData(nameof(GoodShipPlacements))]
-        public void ABoardWillIndicateIfAShipIsInAValidPosition(Location bowAt, Direction heading)
-        {
-            var shipToPlace = new ShipDetails
-            {
-                ClassName = "Destroyer",
-                ClassSize = 3,
-                BowAt = bowAt,
-                Heading = heading
+                new Location('a', 1), Heading.N
             };
-
-            var sut = new Board {Dimensions = 8};
-            Assert.True(sut.ShipFitsOnBoard(shipToPlace));
+            // heading South, row should decrease
+            yield return new object[]
+            {
+                new Location('c', 1), Heading.S
+            };
+            // heading West, col should increase
+            yield return new object[]
+            {
+                new Location('a', 1), Heading.W
+            };
+            // heading East, col should decrease
+            yield return new object[]
+            {
+                new Location('a', 3), Heading.E
+            };
         }
+    }
 
-        [Theory]
-        [MemberData(nameof(BadShipPlacements))]
-        public void ABoardWillIndicateIfAShipIsInAnInvalidPosition(Location bowAt, Direction heading)
+    public static IEnumerable<object[]> BadShipPlacements
+    {
+        get
         {
-            var shipToPlace = new ShipDetails
+            // Heading South, row should decrease off the board
+            yield return new object[]
             {
-                ClassName = "Destroyer",
-                ClassSize = 3,
-                BowAt = bowAt,
-                Heading = heading
+                new Location('a', 1), Heading.S
             };
-
-            var sut = new Board {Dimensions = 8};
-            Assert.False(sut.ShipFitsOnBoard(shipToPlace));
+            // heading East, col should decrease off the board
+            yield return new object[]
+            {
+                new Location('a', 1), Heading.E
+            };
         }
+    }
 
-        [Fact]
-        public void ABoardWillAllowIndicateThatTwoShipThatDoNotOverlapAreOk()
-        {
-            var sut = new Board {Dimensions = 8};
+    [Theory]
+    [MemberData(nameof(GoodShipPlacements))]
+    public void ABoardWillIndicateIfAShipIsInAValidPosition(Location bowAt, Heading heading)
+    {
+        var shipToPlace = ShipFactory.BuildShip(ShipClasses.Cruiser, bowAt, heading);
 
-            var shipOne = new ShipDetails
-            {
-                ClassName = "Destroyer",
-                ClassSize = 3,
-                BowAt = new Location('a', 1),
-                Heading = Direction.N
-            };
+        var sut = new Board (8);
+        var (boatPlaced, message) = sut.AddShip(shipToPlace);
+        Assert.True(boatPlaced);
+        Assert.Equal("Ship added.", message);
+    }
 
-            sut.AddShip(shipOne);
-            Assert.Equal(1, sut.Ships.Sum(s => 1));
+    [Theory]
+    [MemberData(nameof(BadShipPlacements))]
+    public void ABoardWillIndicateIfAShipIsInAnInvalidPosition(Location bowAt, Heading heading)
+    {
+        var shipToPlace = ShipFactory.BuildShip(ShipClasses.Cruiser, bowAt, heading);
 
-            var shipTwo = new ShipDetails
-            {
-                ClassName = "Destroyer",
-                ClassSize = 3,
-                BowAt = new Location('a', 5),
-                Heading = Direction.N
-            };
+        var sut = new Board (8);
+        var (added, message) = sut.AddShip(shipToPlace);
+        Assert.False(added);
+        Assert.Equal("Ship would not be completely on the board.", message);
+    }
 
-            Assert.True(sut.ShipFitsOnBoard(shipTwo));
+    [Fact]
+    public void ABoardWillAllowIndicateThatTwoShipThatDoNotOverlapAreOk()
+    {
+        var sut = new Board (8);
 
-            sut.AddShip(shipTwo);
-            Assert.Equal(2, sut.Ships.Sum(s => 1));
-        }
+        var shipOne = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('a', 1), Heading.N);
+        Assert.True(sut.AddShip(shipOne).Added);
+        Assert.True(sut.HasActiveShips);
+        Assert.Single(sut.Ships);
 
-        [Fact]
-        public void ABoardWillAllowIndicateThatTwoShipThatOverlapAreBad()
-        {
-            var sut = new Board {Dimensions = 8};
+        var shipTwo = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('a', 5), Heading.N);
+        Assert.True(sut.AddShip(shipTwo).Added);
+        Assert.True(sut.HasActiveShips);
+        Assert.Equal(2, sut.Ships.Count());
+    }
 
-            var shipOne = new ShipDetails
-            {
-                ClassName = "Destroyer",
-                ClassSize = 3,
-                BowAt = new Location('a', 1),
-                Heading = Direction.N
-            };
+    [Fact]
+    public void ABoardWillAllowIndicateThatTwoShipThatOverlapAreBad()
+    {
+        var sut = new Board(8);
 
-            sut.AddShip(shipOne);
-            Assert.Equal(1, sut.Ships.Sum(s => 1));
+        var shipOne = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('a', 1), Heading.N);
+        Assert.True(sut.AddShip(shipOne).Added);
+        Assert.Single(sut.Ships);
 
-            var shipTwo = new ShipDetails
-            {
-                ClassName = "Destroyer",
-                ClassSize = 3,
-                BowAt = new Location('c', 1),
-                Heading = Direction.N
-            };
+        var shipTwo = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('c', 1), Heading.N);
+        var (added, message) = sut.AddShip(shipTwo);
+        Assert.False(added);
+        Assert.Equal("Another ship already occupies some or all of these spaces.", message);
+        Assert.Single(sut.Ships);
+    }
 
-            Assert.False(sut.ShipFitsOnBoard(shipTwo));
+    [Fact]
+    public void BoardShouldReportActiveBoatsIfAtLeastOneBoatIsActive()
+    {
+        var sut = new Board(8);
+        var shipOne = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('a', 1), Heading.N);
+        sut.AddShip(shipOne);
+        Assert.Single(sut.Ships);
+        var shipTwo = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('g', 4), Heading.E);
+        sut.AddShip(shipTwo);
+        Assert.Equal(2, sut.Ships.Count());
 
-            sut.AddShip(shipTwo);
-            Assert.Equal(1, sut.Ships.Sum(s => 1));
-        }
+        sut.AddShotReceived(new Location('a', 1));
+        sut.AddShotReceived(new Location('b', 1));
+        var (message, hit, sunk) = sut.AddShotReceived(new Location('c', 1));
 
-        [Fact]
-        public void BoardCanHaveZeroValidLocations()
-        {
-            var sut = new Board();
-            Assert.NotNull(sut.ValidLocations);
-            Assert.Equal(0, sut.ValidLocations.Count);
-        }
-
-        [Fact]
-        public void BoardShouldReportNoActiveBoatsIfNoBoatsAreActive()
-        {
-            var sut = new Board { Dimensions = 8 };
-
-            var shipOne = new ShipDetails
-            {
-                ClassName = "Destroyer",
-                ClassSize = 3,
-                BowAt = new Location('a', 1),
-                Heading = Direction.N,
-                Status = ShipStatus.Sunk
-            };
-
-            sut.AddShip(shipOne);
-            Assert.Equal(1, sut.Ships.Sum(s => 1));
-            Assert.False(sut.HasActiveShips);
-        }
-
-        [Fact]
-        public void BoardShouldReportActiveBoatsIfAtLeastOneBoatIsActive()
-        {
-            var sut = new Board { Dimensions = 8 };
-            var shipOne = new ShipDetails
-            {
-                ClassName = "Destroyer",
-                ClassSize = 3,
-                BowAt = new Location('a', 1),
-                Heading = Direction.N,
-                Status = ShipStatus.Sunk
-            };
-
-            sut.AddShip(shipOne);
-            Assert.Equal(1, sut.Ships.Sum(s => 1));
-            var shipTwo = new ShipDetails
-            {
-                ClassName = "Destroyer",
-                ClassSize = 3,
-                BowAt = new Location('g', 4),
-                Heading = Direction.E,
-                Status = ShipStatus.Active
-            };
-
-            sut.AddShip(shipTwo);
-            Assert.Equal(2, sut.Ships.Sum(s => 1));
-            Assert.True(sut.HasActiveShips);
-        }
+        Assert.Equal(1, sut.Ships.Count(s => s.Status == ShipStatus.Active));
+        Assert.Equal($"You sank the {ShipClasses.Cruiser}!", message);
+        Assert.True(sut.HasActiveShips);
     }
 }

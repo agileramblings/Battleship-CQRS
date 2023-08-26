@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Battleship.Domain.ReadModel;
+﻿using Battleship.Domain;
 using Xunit;
 
 namespace Battleship.Tests
