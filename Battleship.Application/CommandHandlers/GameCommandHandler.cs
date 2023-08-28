@@ -43,7 +43,7 @@ public class GameCommandHandler :
     {
         await _cmdRepo.SaveAsync(request);
         var aggregateGame = await _store.GetAsync(request.AggParams.AggregateId);
-        if (aggregateGame.AddShip(request.ShipDetails, request.PlayerIndex, request.EventParams))
+        if (aggregateGame.AddShip(request.ShipDetails, request.PlayerIndex, request.EventParams).Added)
         {
             // ship was added, persist aggregate
             await _store.SaveAsync(aggregateGame, aggregateGame.Version);

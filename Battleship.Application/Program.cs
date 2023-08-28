@@ -35,7 +35,6 @@ namespace Battleship.Application
 
     internal class Program
     {
-        private static AutofacServiceProvider _services;
         private static ICommandSender _commandBus;
         private static IReadModelQuery _read;
         private static IAggregateRepository<Game> _gameRepo;
@@ -45,8 +44,6 @@ namespace Battleship.Application
         private static async Task Main(string[] args)
         {
             var host = Host.CreateDefaultBuilder(args)
-                //.SetupConfiguration()
-                //.ConfigureOptions()
                 .UseSerilog(ConfigureLogging)
                 .UseServiceProviderFactory(new AutofacServiceProviderFactory())
                 .LoadAutofacModules(new DefaultOwnershipContextResolver(Guid.Empty))
@@ -61,41 +58,43 @@ namespace Battleship.Application
                 _gameRepo = host.Services.GetRequiredService<IAggregateRepository<Game>>();
                 _clock = host.Services.GetRequiredService<IClock>();
                 _eventStore = host.Services.GetRequiredService<IEventStore<Game>>();
-                MainLoop(args);
+
+                await MainLoop(args);
             }
         }
 
         // ReSharper disable once UnusedParameter.Local
-        private static void MainLoop(string[] args)
+        private static async Task MainLoop(string[] args)
         {
             var gameId = Guid.NewGuid();
-            // ApplicationSetup();
+
             bool keepPlaying;
             do
             {
                 Console.Clear();
-                CreateNewGame(gameId).GetAwaiter().GetResult();
-                GetPlayerNames(gameId).GetAwaiter().GetResult();
-                AddShips(gameId).GetAwaiter().GetResult();
+                await CreateNewGame(gameId);
+                await GetPlayerNames(gameId);
+                await AddShips(gameId);
                 var hasWinner = false;
                 do
                 {
-                    PerformAttack(gameId).GetAwaiter().GetResult();
-                    var _currentGame = _read.GetItemAsync<GameProjection>(Guid.Empty, gameId.ToString()).GetAwaiter().GetResult();
-                    if (_currentGame == null)
+                    await PerformAttack(gameId);
+                    var currentGame = await _read.GetItemAsync<GameProjection>(Guid.Empty, gameId.ToString());
+                    if (currentGame != null)
+                    {
+                        if (currentGame.Winner != null) hasWinner = true;
+
+                        WriteLabel("Showing opponents board for demonstration of progress in game.");
+                        var targetPlayerIndex = (uint)currentGame.Turn % 2;
+                        await DrawPlayersBoard(targetPlayerIndex, gameId);
+                        WriteLabel(currentGame.LastMessage);
+                        WriteLine();
+                    }
+                    else
                     {
                         throw new Exception("The game broke. Sorry!");
                     }
-
-                    if (_currentGame.Winner != null) hasWinner = true;
-
-                    WriteLabel("Showing opponents board for demonstration of progress in game.");
-                    var targetPlayerIndex = (uint)_currentGame.Turn % 2;
-                    DrawPlayersBoard(targetPlayerIndex, gameId).GetAwaiter().GetResult();
-                    WriteLabel(_currentGame.LastMessage);
-                    WriteLine();
                 } while (!hasWinner);
-
                 keepPlaying = WouldYouLikeToKeepPlaying();
             } while (keepPlaying);
 
@@ -109,15 +108,15 @@ namespace Battleship.Application
 
         private static async Task PerformAttack(Guid gameId)
         {
-            var _currentGame= await _gameRepo.GetAsync(gameId.ToString());
+            var currentGame= await _gameRepo.GetAsync(gameId.ToString());
             // playerIndex is the modulus of the turn
-            var attackingPlayerIndex = (uint) _currentGame.Turn % 2;
+            var attackingPlayerIndex = (uint) currentGame.Turn % 2;
             var targetPlayer = (uint) (attackingPlayerIndex == 0 ? 1 : 0);
 
             var row = GetRowForPlayer(attackingPlayerIndex, gameId);
             var col = GetColForPlayer(attackingPlayerIndex, gameId);
             await _commandBus.SendAsync(new FireShot(attackingPlayerIndex, targetPlayer, new Location(row, col), 
-                new AggregateParams(_currentGame.AggregateId, _currentGame.Version, false, Guid.Empty), 
+                new AggregateParams(currentGame.AggregateId, currentGame.Version, false, Guid.Empty), 
                 new EventParams("", _clock.GetCurrentInstant(), "", Guid.Empty)));
         }
 
@@ -133,15 +132,15 @@ namespace Battleship.Application
                     WriteInstruction(
                         "You are about to place a Cruiser (3 spaces) on your board. We will pick a spot on the board to place the bow (front)");
                     WriteInstruction("and then we will pick the direction that your boat is heading.");
-                    var row = GetRowValue(playerIndex, "Please enter the row for the bow of your ship", gameId).GetAwaiter().GetResult();
-                    var col = GetColumnValue(playerIndex, "Please enter the column for the bow of your ship", gameId).GetAwaiter().GetResult();
-                    var heading = GetHeadingValue(playerIndex, gameId).GetAwaiter().GetResult();
+                    var row = await GetRowValue(playerIndex, "Please enter the row for the bow of your ship", gameId);
+                    var col = await GetColumnValue(playerIndex, "Please enter the column for the bow of your ship", gameId);
+                    var heading = await GetHeadingValue(playerIndex, gameId);
                     var location = new Location(row, col);
 
-                    shipToAdd = ShipFactory.BuildShip(ShipClasses.Cruiser, location, ConvertToHeading(heading));
+                    shipToAdd = ShipFactory.BuildShip(ShipType.Cruiser, location, ConvertToHeading(heading));
 
                     // see if ship can be placed here
-                    var (added, message) = game.Players[playerIndex].Board.AddShip(shipToAdd);
+                    var (added, message) = game.AddShip(shipToAdd, playerIndex, new EventParams("", _clock.GetCurrentInstant(), "", Guid.Empty));
                     if (!added)
                     {
                         WriteInstruction(message);

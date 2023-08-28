@@ -55,7 +55,7 @@ public class BoardTests
     [MemberData(nameof(GoodShipPlacements))]
     public void ABoardWillIndicateIfAShipIsInAValidPosition(Location bowAt, Heading heading)
     {
-        var shipToPlace = ShipFactory.BuildShip(ShipClasses.Cruiser, bowAt, heading);
+        var shipToPlace = ShipFactory.BuildShip(ShipType.Cruiser, bowAt, heading);
 
         var sut = new Board (8);
         var (boatPlaced, message) = sut.AddShip(shipToPlace);
@@ -67,7 +67,7 @@ public class BoardTests
     [MemberData(nameof(BadShipPlacements))]
     public void ABoardWillIndicateIfAShipIsInAnInvalidPosition(Location bowAt, Heading heading)
     {
-        var shipToPlace = ShipFactory.BuildShip(ShipClasses.Cruiser, bowAt, heading);
+        var shipToPlace = ShipFactory.BuildShip(ShipType.Cruiser, bowAt, heading);
 
         var sut = new Board (8);
         var (added, message) = sut.AddShip(shipToPlace);
@@ -80,12 +80,12 @@ public class BoardTests
     {
         var sut = new Board (8);
 
-        var shipOne = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('a', 1), Heading.N);
+        var shipOne = ShipFactory.BuildShip(ShipType.Cruiser, new Location('a', 1), Heading.N);
         Assert.True(sut.AddShip(shipOne).Added);
         Assert.True(sut.HasActiveShips);
         Assert.Single(sut.Ships);
 
-        var shipTwo = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('a', 5), Heading.N);
+        var shipTwo = ShipFactory.BuildShip(ShipType.Cruiser, new Location('a', 5), Heading.N);
         Assert.True(sut.AddShip(shipTwo).Added);
         Assert.True(sut.HasActiveShips);
         Assert.Equal(2, sut.Ships.Count());
@@ -96,11 +96,11 @@ public class BoardTests
     {
         var sut = new Board(8);
 
-        var shipOne = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('a', 1), Heading.N);
+        var shipOne = ShipFactory.BuildShip(ShipType.Cruiser, new Location('a', 1), Heading.N);
         Assert.True(sut.AddShip(shipOne).Added);
         Assert.Single(sut.Ships);
 
-        var shipTwo = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('c', 1), Heading.N);
+        var shipTwo = ShipFactory.BuildShip(ShipType.Cruiser, new Location('c', 1), Heading.N);
         var (added, message) = sut.AddShip(shipTwo);
         Assert.False(added);
         Assert.Equal("Another ship already occupies some or all of these spaces.", message);
@@ -111,19 +111,25 @@ public class BoardTests
     public void BoardShouldReportActiveBoatsIfAtLeastOneBoatIsActive()
     {
         var sut = new Board(8);
-        var shipOne = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('a', 1), Heading.N);
+        var shipOne = ShipFactory.BuildShip(ShipType.Cruiser, new Location('a', 1), Heading.N);
         sut.AddShip(shipOne);
         Assert.Single(sut.Ships);
-        var shipTwo = ShipFactory.BuildShip(ShipClasses.Cruiser, new Location('g', 4), Heading.E);
+        var shipTwo = ShipFactory.BuildShip(ShipType.Cruiser, new Location('g', 4), Heading.E);
         sut.AddShip(shipTwo);
         Assert.Equal(2, sut.Ships.Count());
 
-        sut.AddShotReceived(new Location('a', 1));
-        sut.AddShotReceived(new Location('b', 1));
-        var (message, hit, sunk) = sut.AddShotReceived(new Location('c', 1));
+        var result = sut.AddShotReceived(new Location('a', 1));
+        Assert.True(result.Hit);
+        Assert.Equal("Hit!", result.Message);
+        result = sut.AddShotReceived(new Location('b', 1));
+        Assert.True(result.Hit);
+        Assert.Equal("Hit!", result.Message);
+        result = sut.AddShotReceived(new Location('c', 1));
+        Assert.True(result.Hit);
+        Assert.True(result.SunkShip);
+        Assert.Equal($"You sank the {ShipType.Cruiser.Name}!", result.Message);
 
         Assert.Equal(1, sut.Ships.Count(s => s.Status == ShipStatus.Active));
-        Assert.Equal($"You sank the {ShipClasses.Cruiser}!", message);
         Assert.True(sut.HasActiveShips);
     }
 }

@@ -16,13 +16,13 @@ public class Game : OwnedAggregateBase
     public uint Turn { get; private set; }
     public uint Dimensions { get; private set; }
     public bool LastAttackResult { get; private set; }
-    public string LastMessage { get; private set; }
+    public string LastMessage { get; private set; } = string.Empty;
     public Player? LastPlayer { get; private set; }
     public Instant LastPlayedOn { get; private set; }
     public GameStatus GameStatus { get; private set; } = GameStatus.NotStarted;
 
     public Game() : base("tbd", Guid.Empty) { /* DO NOT USE - Serializers Only*/ }
-    public Game(Guid newGameId, uint dimensionSize, EventParams eventParams) : base(string.Empty, Guid.Empty)
+    public Game(Guid newGameId, uint dimensionSize, EventParams eventParams) : base(newGameId.ToString(), Guid.Empty)
     {
         var aggParams = new AggregateParams(newGameId.ToString(), -1, false, Guid.Empty);
         ApplyChange(new GameCreated(2, dimensionSize, aggParams, eventParams));
@@ -33,15 +33,16 @@ public class Game : OwnedAggregateBase
         ApplyChange(new PlayerNameUpdated(name, position, GetAggregateParams(), eventParams));
     }
 
-    public bool AddShip(Ship ship, uint playerIndex, EventParams eventParams)
+    public AddShipResult AddShip(Ship ship, uint playerIndex, EventParams eventParams)
     {
         // Ensure current ship fits within board dimensions
-        if (Players[playerIndex].Board.AddShip(ship).Added)
+        var result = Players[playerIndex].Board.CanPlaceShip(ship, out _);
+        if (result.Added)
         {
             ApplyChange(new ShipAdded(playerIndex, ship, GetAggregateParams(), eventParams));
-            return true;
         }
-        return false;
+
+        return result;
     }
 
     public void FireShot(Location target, uint attackingPlayerIndex, uint targetPlayerIndex, EventParams eventParams)
@@ -83,7 +84,7 @@ public class Game : OwnedAggregateBase
     {
         Turn++;
         Players[e.Aggressor].Board.AddShotFired(e.Location);
-        var (lastMessage, hit, sunkShip) = Players[e.Target].Board.AddShotReceived(e.Location);
+        var (hit, sunkShip, lastMessage) = Players[e.Target].Board.AddShotReceived(e.Location);
         LastMessage = lastMessage;
         LastAttackResult = hit;
         LastPlayer = Players[e.Aggressor];
@@ -120,7 +121,7 @@ public class Game : OwnedAggregateBase
             LastMessage = this.LastMessage,
             OwnerId = this.Owner,
             Turn = this.Turn,
-            Winner = (uint)Array.FindIndex(this.Players, p => p == this.Winner)
+            Winner = Winner?.Position
         };
     }
 }

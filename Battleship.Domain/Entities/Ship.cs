@@ -13,21 +13,24 @@ public class Ship : EntityBase
     public string ClassName { get; set; } = "Destroyer";
     public uint TimesHit { get; private set; }
     public ShipStatus Status { get; set; } = ShipStatus.DryDock;
+    private readonly HashSet<Location> _hitAtLocations = new();
 
     public Ship() : base(Guid.NewGuid().ToString())
     {
     }
 
-    public (string message, bool hit, bool sunkShip) Hit()
+    public AttackShipResult Hit(Location hitAtLocation)
     {
-        TimesHit++;
-        if (TimesHit >= ClassSize)
+        // Ship has already been hit here
+        if (!_hitAtLocations.Add(hitAtLocation)) return new AttackShipResult(true, false, "Hit!");
+
+        // new hit - check if ship is sunk
+        if(_hitAtLocations.Count >= ClassSize)
         {
             Status = ShipStatus.Sunk;
-            return ($"You sank the {ClassName}!", true, true);
+            return new AttackShipResult(true, true, $"You sank the {ClassName}!");
         }
-
-        return ("Hit!", true, false);
+        return new AttackShipResult(true, false, "Hit!");
     }
     public override string ToString()
     {

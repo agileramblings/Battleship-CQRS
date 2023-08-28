@@ -1,5 +1,4 @@
-﻿using System;
-using Battleship.Domain.Core.DDD;
+﻿using Battleship.Domain.Core.DDD;
 using Battleship.Domain.Entities;
 using NodaTime;
 
@@ -16,11 +15,11 @@ public class GameProjection : ProjectionBase
     }
 
     public uint Turn { get; set; }
-    public Player[] Players { get; set; }
-    public uint? Winner { get; set; }
+    public Player[] Players { get; set; } = Array.Empty<Player>();
+    public uint? Winner { get; set; } = null;
     public uint Dimensions { get; set; }
     public Instant ActivatedOn { get; set; }
-    public string LastMessage { get; set; }
+    public string LastMessage { get; set; } = string.Empty;
 
     public bool ValidRowSelection(char row)
     {

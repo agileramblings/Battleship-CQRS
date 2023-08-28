@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Kekiri" Version="5.1.0" />
+    <PackageReference Include="Kekiri.Xunit" Version="1.2.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.7.1" />
     <PackageReference Include="OpenMoq" Version="4.20.2" />
     <PackageReference Include="xunit" Version="2.5.0" />

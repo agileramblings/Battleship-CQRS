@@ -71,34 +71,59 @@ public class Board : EntityBase
         }
     }
 
-    public (bool Added, string Message) AddShip(Ship shipToAdd)
+
+    public AddShipResult CanPlaceShip(Ship shipToAdd, out List<Location> desiredLocations)
     {
         // does the ship's size and orientation with the bow location fit on the board
-        var desiredLocations = BuildDesiredLocations(shipToAdd);
+        desiredLocations = BuildDesiredLocations(shipToAdd);
         if (!desiredLocations.All(dl => ValidRowSelection(dl.Row) && ValidColumnSelection(dl.Column)))
         {
-            return (false, "Ship would not be completely on the board.");
+            return new AddShipResult(false, "Ship would not be completely on the board.");
         }
 
         // does the board have any ships occupying any of those spots yet
+
+        /* - this is an O(N) search + the memory allocation of the keys to a hashset
         var occupiedLocations = _locationsWithShips.Keys.ToHashSet();
         if (occupiedLocations.Intersect(desiredLocations).Any())
         {
             return (false, "Another ship already occupies some or all of these spaces.");
         }
+        */
 
-        // add occupied locations with reference to ship
-        foreach (var location in desiredLocations)
+        // this is a N * O(1) search with N being the ship size with no memory allocation for the keys
+        // I think this would be overall faster than the above search
+        foreach (var loc in desiredLocations)
         {
-            _locationsWithShips.Add(location, shipToAdd);
+            if (_locationsWithShips.ContainsKey(loc))
+            {
+                return new AddShipResult(false, "Another ship already occupies some or all of these spaces.");
+            }
         }
 
-        // increment the number of active ships in the theater
-        _ships.Add(shipToAdd);
-        ActiveShips++;
-        shipToAdd.Status = ShipStatus.Active;
+        return new AddShipResult(true, "Can add ship");
 
-        return (true, "Ship added.");
+    }
+    public AddShipResult AddShip(Ship shipToAdd)
+    {
+        var result = CanPlaceShip(shipToAdd, out var desiredLocations);
+
+        if (result.Added)
+        {
+            // add occupied locations with reference to ship
+            foreach (var location in desiredLocations)
+            {
+                _locationsWithShips.Add(location, shipToAdd);
+            }
+
+            // increment the number of active ships in the theater
+            _ships.Add(shipToAdd);
+            ActiveShips++;
+            shipToAdd.Status = ShipStatus.Active;
+
+            return new AddShipResult(true, "Ship added.");
+        }
+        return  new AddShipResult(result.Added, result.Message);
     }
 
     public void AddShotFired(Location shotFired)
@@ -106,21 +131,21 @@ public class Board : EntityBase
         _shotsFired.Add(shotFired);
     }
 
-    public (string Message, bool Hit, bool SunkShip) AddShotReceived(Location shotReceived)
+    public AttackShipResult AddShotReceived(Location shotReceived)
     {
-        // has this shot been received previously? 
-        var newShot = _shotsReceived.Add(shotReceived);
+        _shotsReceived.Add(shotReceived);
 
-        if (_locationsWithShips.TryGetValue(shotReceived, out var boatAtLocation))
+        if(_locationsWithShips.TryGetValue(shotReceived, out var boatAtLocation))
         {
-            return newShot ?
-                // increment damage counter on boat
-                boatAtLocation.Hit() :
-                // do not increment the boat damage counter, but respond that there was a hit
-                ("Hit!", true, false);
-        }
+            var result = boatAtLocation.Hit(shotReceived);
+            if (result.SunkShip)
+            {
+                ActiveShips--;
+            }
 
-        return ("Missed!", false, false);
+            return result;
+        }
+        return new AttackShipResult(false, false, "Missed");
     }
 
     private bool ValidRowSelection(char row)
