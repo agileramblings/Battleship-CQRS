@@ -281,8 +281,10 @@ namespace Battleship.Application
         private static void ShowGameEvents(Guid gameId)
         {
             var gameEvents = _eventStore.GetEventsForAggregateAsync(gameId.ToString()).Result;
+            WriteLabel($"AggregateId: {gameId}");
+
             foreach (var e in gameEvents)
-                WriteFinishColor($"AggregateId: {gameId} Event Type: {e.GetType().Name} - Aggregate Version: {e.AggParams.Version} - EventId: {e.MessageId}");
+                WriteFinishColor($"Event Type: {e.GetType().Name} - Aggregate Version: {e.AggParams.Version} - EventId: {e.MessageId}");
         }
 
         private static bool WouldYouLikeToKeepPlaying()

@@ -48,6 +48,12 @@ public class Game : OwnedAggregateBase
     public void FireShot(Location target, uint attackingPlayerIndex, uint targetPlayerIndex, EventParams eventParams)
     {
         ApplyChange(new ShotFired( attackingPlayerIndex, targetPlayerIndex, target, GetAggregateParams(), eventParams));
+
+        // if any player does not have active ships, the other player has won
+        if (!Players[targetPlayerIndex].Board.HasActiveShips)
+        {
+            ApplyChange(new GameWon(attackingPlayerIndex, GetAggregateParams(), eventParams));
+        }
     }
 
     #region Private Event Handlers
@@ -90,14 +96,6 @@ public class Game : OwnedAggregateBase
         LastPlayer = Players[e.Aggressor];
         LastPlayedOn = e.EventParams.ReceivedOn;
         Version = e.AggParams.Version;
-        if (sunkShip)
-        {
-            // check if there are any active ships left
-            if (!Players[e.Target].Board.HasActiveShips)
-            {
-                ApplyChange(new GameWon(e.Aggressor, GetAggregateParams(), e.EventParams));
-            }
-        }
     }
 
     private void Apply(GameWon e)

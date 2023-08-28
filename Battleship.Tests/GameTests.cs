@@ -88,6 +88,7 @@ namespace Battleship.Tests
         {
             Assert.NotNull(_sut);
             Assert.NotNull(_sut.Winner);
+            Assert.Equal(_sut.Players[1], _sut.Winner);
             Assert.Equal($"You sank the {ShipType.Cruiser.Name}!", _sut.LastMessage);
             Assert.NotNull(_sut.LastPlayer);
             Assert.Equal(1U, _sut.LastPlayer.Position);
